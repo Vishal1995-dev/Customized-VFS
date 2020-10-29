@@ -22,6 +22,7 @@ struct inode
 	int Link_Count;
 	int Ref_Count;
 	int File_Type;
+	int Permission;
 	char *Data;
 	struct inode *next;
 };
@@ -35,8 +36,8 @@ struct FileTable
 	int Read_Offset;
 	int Write_Offset;
 	int Count;
-	PINODE ptr;
 	int Mode;
+	PINODE ptr;
 };
 
 typedef FileTable FILETABLE;
@@ -92,7 +93,7 @@ void CreateUFDT()
 	int i=0;
 	for(i=0;i<MAXFILES;i++)
 	{
-		Obj_UFDT.ufdt[i]==NULL;
+		Obj_UFDT.ufdt[i]=NULL;
 	}
 }
 
@@ -136,12 +137,151 @@ void ManPage(char *str)
 	}
 }
 
+int GetFDFromName(char *name)
+{
+	int i = 0;
+	while(i<MAXFILES)
+	{
+		if(Obj_UFDT.ufdt[i] != NULL)
+		{
+			if(strcmp((Obj_UFDT.ufdt[i]->ptr->File_name),name)==0)
+				{
+					break;
+				}
+		}
+		i++;
+	}
+	if(i == 50)
+	{
+		return -1;
+	}
+	else
+	{
+		return i;
+	}
+}
+
+PINODE Get_Inode(char * name)
+{
+	PINODE temp = Head;
+	int i = 0;
+	
+	if(name == NULL)
+	{
+		return NULL;
+	}
+	while(temp!= NULL)
+	{
+		if(strcmp(name,temp->File_name) == 0)
+		{
+			break;
+		}
+		temp = temp->next;
+	}
+	return temp;
+}
+
+int CreateFile(char *name,int permission)
+{
+	if(name==NULL)
+	{
+		return -1;
+	}
+	PINODE temp = Get_Inode(name);
+	if(temp!=NULL)
+	{
+		return -3;
+	}
+	int i = 0;
+	temp=Head;
+	while(temp->Link_Count!=0 && i<MAXFILES)
+	{
+		i+=1;
+		temp=temp->next;
+	}
+	if(i==MAXFILES)
+	{
+		return -2;
+	}
+	else
+	{
+		strcpy(temp->File_name,name);
+		temp->Link_Count=1;
+		temp->Ref_Count=1;
+		temp->File_Type=1;
+		temp->Permission=permission;
+		temp->Data=(char *) malloc (1024);
+		
+		PFILETABLE ptable =(PFILETABLE)malloc(sizeof(FILETABLE));
+		ptable->Read_Offset=0;
+		ptable->Write_Offset=0;
+		ptable->Count=1;
+		ptable->Mode=1;
+		ptable->ptr=temp;
+		
+		Obj_Super.Free_Inodes-=1;
+		i=0;
+		while(Obj_UFDT.ufdt[i]!=NULL)
+		{
+			i++;
+		}
+		Obj_UFDT.ufdt[i]=ptable;
+		return i;
+	}
+}
+
+void LS()
+{
+	PINODE temp = Head;
+	while(temp->Link_Count!=0)
+	{
+		printf("%s\n",temp->File_name);
+		temp=temp->next;
+	}
+}
+
+int Fstat(int fd)
+{
+	PFILETABLE ptable=Obj_UFDT.ufdt[fd];
+	if(ptable==NULL)
+	{
+		return -2;
+	}
+	else
+	{
+		PINODE temp = NULL;
+		temp=ptable->ptr;
+		printf("Name : %s\n",temp->File_name);
+		printf("File Size : %d\n",temp->File_Size);
+		printf("File Type : %d\n",temp->File_Type);
+		printf("Actual File Size : %d\n",temp->Actual_FileSize);
+		printf("Link Count : %d\n",temp->Link_Count);
+		return 0;
+	}
+}
+
+int Stat(char *name)
+{
+	PINODE temp = Get_Inode(name);
+	if(temp==NULL)
+	{
+		return -2;
+	}
+	printf("Name : %s\n",temp->File_name);
+	printf("File Size : %d\n",temp->File_Size);
+	printf("File Type : %d\n",temp->File_Type);
+	printf("Actual File Size : %d\n",temp->Actual_FileSize);
+	printf("Link Count : %d\n",temp->Link_Count);
+	return 0;
+}
+
+
 int main()
 {
 	//Variable declaration
 	char str[80];
 	char command[4][80];
-	int count=0;
+	int count=0,ret=0;
 	
 	system("clear");
 	printf("Customized Virtual File System\n");
@@ -157,7 +297,11 @@ int main()
 		count=sscanf(str,"%s %s %s %s",command[0],command[1],command[2],command[3]); //Break command into tokens
 		if(count==1)
 		{
-			if(strcmp(command[0],"help")==0)
+			if(strcmp(command[0],"ls") == 0)
+			{
+				LS();
+			}
+			else if(strcmp(command[0],"help")==0)
 			{
 				DisplayHelp();
 			}
@@ -178,7 +322,25 @@ int main()
 		}
 		else if(count==2)
 		{
-			if(strcmp(command[0],"man")==0)
+			if(strcmp(command[0],"stat") == 0)
+			{
+				ret = Stat(command[1]);
+				if(ret == -1)
+					printf("ERROR : Incorrect parameters\n");
+				if(ret == -2)
+					printf("ERROR : There is no such file\n");
+				continue;
+			}
+			else if(strcmp(command[0],"fstat") == 0)
+			{
+				ret = Fstat(atoi(command[1]));
+				if(ret == -1)
+					printf("ERROR : Incorrect parameters\n");
+				if(ret == -2)
+					printf("ERROR : There is no such file\n");
+				continue;
+			}
+			else if(strcmp(command[0],"man")==0)
 			{
 				ManPage(command[1]);
 			}
@@ -189,7 +351,25 @@ int main()
 		}
 		else if(count==3)
 		{
-		
+			if(strcmp(command[0],"create") == 0)
+			{
+				ret = CreateFile(command[1],atoi(command[2]));
+				if(ret >= 0)
+					printf("File is successfully created with file descriptor : %d\n",ret);
+				if(ret == -1)
+					printf("ERROR : Incorrect parameters\n");
+				if(ret == -2)
+					printf("ERROR : There is no inodes\n");
+				if(ret == -3)
+					printf("ERROR : File already exists\n");
+				if(ret == -4)
+					printf("ERROR : Memory allocation failure\n");
+				continue;
+			}
+			else
+			{
+				printf("Command not found\n");
+			}
 		}
 		else if(count==4)
 		{
