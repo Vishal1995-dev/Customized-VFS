@@ -7,6 +7,9 @@
 #define MAXFILES 100
 #define FILESIZE 1024;
 
+#define READ 4
+#define WRITE 2
+
 struct SuperBlock
 {
 	int Total_Inodes;
@@ -107,29 +110,52 @@ void SetEnvironment()
 void DisplayHelp()
 {
 	printf("------------------------------------\n");
-	printf("open: Used to open existing file\n");
-	printf("read: Used to read existing file\n");
-	printf("write: Used to write into existing file\n");
-	printf("creat: Used to create new file\n");
+	printf("read : Used to read existing file\n");
+	printf("write : Used to write into existing file\n");
+	printf("create : Used to create new file\n");
+	printf("ls : Used to list all existing file\n");
+	printf("fstat : Dispaly info of existing file\n");
+	printf("stat : Display info of existing file\n");
+	printf("rm : Used to delete existing file\n");
 	printf("------------------------------------\n");
 }
 
 void ManPage(char *str)
 {
-	if(strcmp(str,"open")==0)
+	if(strcmp(str,"create")==0)
 	{
-		printf("Desciiption : Used to open file\n");
-		printf("Usage : open file_name mode\n");
-	}
-	else if(strcmp(str,"close")==0)
-	{
-		printf("Desciiption : Used to close file\n");
-		printf("Usage : close file_name\n");	
+		printf("Description : Create new file\n");
+		printf("Usage : create file_name permission\n");
 	}
 	else if(strcmp(str,"ls")==0)
 	{
 		printf("Desciiption : List all file\n");
 		printf("Usage : ls\n");	
+	}
+	else if(strcmp(str,"fstat")==0)
+	{
+		printf("Desciiption : List all information about file\n");
+		printf("Usage : fstat file_descriptor\n");	
+	}
+	else if(strcmp(str,"stat")==0)
+	{
+		printf("Desciiption : List all information about file\n");
+		printf("Usage : stat file_name\n");	
+	}
+	else if(strcmp(str,"rm")==0)
+	{
+		printf("Desciiption : Delete existing file\n");
+		printf("Usage : rm file_name\n");	
+	}
+	else if(strcmp(str,"read")==0)
+	{
+		printf("Desciiption : Read data from existing file\n");
+		printf("Usage : read file_descriptor number_of_bytes_to_read\n");	
+	}
+	else if(strcmp(str,"write")==0)
+	{
+		printf("Desciiption : Write data into existing file\n");
+		printf("Usage : write file_descriptor\n");	
 	}
 	else
 	{
@@ -230,12 +256,48 @@ int CreateFile(char *name,int permission)
 	}
 }
 
+void DeleteFile(char *name)
+{
+	PINODE temp = Get_Inode(name);
+	if(temp==NULL)
+	{	
+		printf("No such file\n");
+		return;
+	}
+	int i=0;
+	for(i=0;i<MAXFILES;i++)
+	{
+		if(Obj_UFDT.ufdt[i]!=NULL && strcmp(Obj_UFDT.ufdt[i]->ptr->File_name, name) == 0)
+        {
+            break;
+        }
+    }
+    
+    strcpy(Obj_UFDT.ufdt[i]->ptr->File_name,"");
+    Obj_UFDT.ufdt[i]->ptr->File_Type = 0;
+    Obj_UFDT.ufdt[i]->ptr->Actual_FileSize = 0;
+    Obj_UFDT.ufdt[i]->ptr->Link_Count = 0;
+    Obj_UFDT.ufdt[i]->ptr->Ref_Count = 0;
+    Obj_UFDT.ufdt[i]->ptr->Permission = 0;
+    
+    free(Obj_UFDT.ufdt[i]->ptr->Data);
+    
+    free(Obj_UFDT.ufdt[i]);
+    
+    Obj_UFDT.ufdt[i] = NULL;
+    
+    Obj_Super.Free_Inodes+=1;
+}
+
 void LS()
 {
 	PINODE temp = Head;
-	while(temp->Link_Count!=0)
+	while(temp!=NULL)
 	{
-		printf("%s\n",temp->File_name);
+		if(temp->Link_Count!=0)
+		{
+			printf("%s\n",temp->File_name);
+		}
 		temp=temp->next;
 	}
 }
@@ -275,6 +337,49 @@ int Stat(char *name)
 	return 0;
 }
 
+void WriteFile(int fd, char *arr, int size)
+{
+    if(Obj_UFDT.ufdt[fd] == NULL)
+    {
+        printf("Invalid file descriptor\n");
+        return;
+    }
+    
+    if(Obj_UFDT.ufdt[fd]->ptr->Permission == READ || Obj_UFDT.ufdt[fd]->ptr->Permission == 0)
+    {
+        printf("There is no write permission\n");
+        return;
+    }
+ 
+    strncpy(((Obj_UFDT.ufdt[fd]->ptr->Data)+(Obj_UFDT.ufdt[fd]->Write_Offset)),arr,size);
+    
+    Obj_UFDT.ufdt[fd]->Write_Offset = Obj_UFDT.ufdt[fd]->Write_Offset + size;
+}
+
+void ReadFile(int fd,int size)
+{
+    if(Obj_UFDT.ufdt[fd] == NULL)
+    {
+        printf("Invalid file descriptor\n");
+        return;
+    }
+    
+    if(Obj_UFDT.ufdt[fd]->ptr->Permission == WRITE || Obj_UFDT.ufdt[fd]->ptr->Permission == 0)
+    {
+        printf("There is no read permission\n");
+        return;
+    }
+ 	
+ 	char arr[size];
+ 	
+    strncpy(arr,((Obj_UFDT.ufdt[fd]->ptr->Data)+(Obj_UFDT.ufdt[fd]->Read_Offset)),size);
+    
+    Obj_UFDT.ufdt[fd]->Read_Offset = Obj_UFDT.ufdt[fd]->Read_Offset + size;
+    
+    printf("%s\n",arr);
+    
+    return;
+}
 
 int main()
 {
@@ -344,6 +449,21 @@ int main()
 			{
 				ManPage(command[1]);
 			}
+			else if(strcmp(command[0],"rm")==0)
+			{
+				DeleteFile(command[1]);
+			}
+			else if(strcmp(command[0],"write") == 0)
+            {
+                char arr[1024];
+                
+                printf("Please enter data to write\n");
+                fgets(arr,1024,stdin);
+                
+                fflush(stdin);
+                
+                WriteFile(atoi(command[1]),arr,strlen(arr)-1);
+            }
 			else
 			{
 				printf("Command not found\n");
@@ -359,13 +479,15 @@ int main()
 				if(ret == -1)
 					printf("ERROR : Incorrect parameters\n");
 				if(ret == -2)
-					printf("ERROR : There is no inodes\n");
+					printf("ERROR : There are no inodes\n");
 				if(ret == -3)
 					printf("ERROR : File already exists\n");
-				if(ret == -4)
-					printf("ERROR : Memory allocation failure\n");
 				continue;
 			}
+			else if(strcmp(command[0],"read") == 0)
+            {                
+                ReadFile(atoi(command[1]),atoi(command[2]));
+            }
 			else
 			{
 				printf("Command not found\n");
