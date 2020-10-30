@@ -454,16 +454,16 @@ int main()
 				DeleteFile(command[1]);
 			}
 			else if(strcmp(command[0],"write") == 0)
-            {
-                char arr[1024];
-                
-                printf("Please enter data to write\n");
-                fgets(arr,1024,stdin);
-                
-                fflush(stdin);
-                
-                WriteFile(atoi(command[1]),arr,strlen(arr)-1);
-            }
+			{
+				char arr[1024];
+
+				printf("Please enter data to write\n");
+				fgets(arr,1024,stdin);
+
+				fflush(stdin);
+
+				WriteFile(atoi(command[1]),arr,strlen(arr)-1);
+			}
 			else
 			{
 				printf("Command not found\n");
@@ -485,9 +485,9 @@ int main()
 				continue;
 			}
 			else if(strcmp(command[0],"read") == 0)
-            {                
-                ReadFile(atoi(command[1]),atoi(command[2]));
-            }
+            		{                
+                		ReadFile(atoi(command[1]),atoi(command[2]));
+            		}
 			else
 			{
 				printf("Command not found\n");
